@@ -1,0 +1,17 @@
+{
+  "name": "playbath",
+  "compatibility_date": "2026-11-19",
+  "pages_build_output_dir": ".",
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "playbath",
+      "database_id": "9f574c7b-7e79-484c-af58-9523749ef60f"
+    }
+  ],
+  "env": {
+    "preview": {
+      "d1_databases": []
+    }
+  }
+}

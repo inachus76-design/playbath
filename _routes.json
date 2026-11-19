@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "include": [
+    "/",
+    "/index",
+    "/index.html",
+    "/api/bath/*"
+  ],
+  "exclude": []
+}
