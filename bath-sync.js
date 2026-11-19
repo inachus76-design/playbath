@@ -14,9 +14,8 @@
   panel.innerHTML = '<details><summary>교사 계정 · 기기 간 공유</summary>' +
     '<form autocomplete="on"><label>교사 아이디 <input name="username" autocomplete="username" minlength="3" maxlength="40" required></label> ' +
     '<label>비밀번호 <input name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></label> ' +
-    '<button type="submit">로그인</button> <button type="button" data-action="enroll">계정 등록</button> ' +
-    '<div data-invite hidden><label>일회용 등록 코드 <input name="invite" autocomplete="off" maxlength="48"></label> ' +
-    '<button type="submit" value="register">등록 완료</button></div></form>' +
+    '<button type="submit" data-auth-submit>로그인</button> <button type="button" data-action="enroll">계정 등록</button> ' +
+    '<p data-registration-help hidden>아이디는 영문 소문자 또는 숫자로 시작하는 3~40자이며, 마침표·밑줄·하이픈을 사용할 수 있습니다. 비밀번호는 12~128자입니다.</p></form>' +
     '<div class="toolbar"><button type="button" data-action="local">이 기기 명단 사용</button> ' +
     '<button type="button" data-action="copy" hidden>이 기기의 기존 명단 복사</button> ' +
     '<button type="button" data-action="retry" hidden>다시 저장</button> ' +
@@ -31,7 +30,16 @@
   const notify = message => { status.textContent = message; };
   const navigation = [...document.querySelectorAll('[data-page]')];
   const panels = [...document.querySelectorAll('.panel')];
-  const inviteRow = panel.querySelector('[data-invite]');
+  const submitButton = form.querySelector('[data-auth-submit]');
+  const registrationHelp = form.querySelector('[data-registration-help]');
+  let registering = false;
+  function setRegistration(enabled) {
+    registering = enabled;
+    registrationHelp.hidden = !enabled;
+    submitButton.textContent = enabled ? '등록 완료' : '로그인';
+    control('enroll').textContent = enabled ? '로그인 화면으로' : '계정 등록';
+    form.elements.password.autocomplete = enabled ? 'new-password' : 'current-password';
+  }
   function controls() {
     form.hidden = !!username;
     control('copy').hidden = !username || !legacy.people.length;
@@ -181,27 +189,25 @@
     await persist();
   };
   control('enroll').onclick = () => {
-    inviteRow.hidden = !inviteRow.hidden;
-    form.elements.password.autocomplete = inviteRow.hidden ? 'current-password' : 'new-password';
-    if (!inviteRow.hidden) form.elements.invite.focus();
+    if (switching || username) return;
+    setRegistration(!registering);
+    form.elements.username.focus();
   };
   form.onsubmit = async event => {
     event.preventDefault();
     if (switching || username) return;
-    const register = event.submitter?.value === 'register';
-    if (register && !form.elements.invite.value.trim()) return notify('일회용 등록 코드를 입력해 주세요.');
+    const register = registering;
     switching = true;
     controls();
     try {
       await request(register ? 'register' : 'login', 'POST', {
-        username:form.elements.username.value, password:form.elements.password.value,
-        ...(register ? {invite:form.elements.invite.value} : {})
+        username:form.elements.username.value,
+        password:form.elements.password.value
       });
       form.reset();
-      inviteRow.hidden = true;
-      form.elements.password.autocomplete = 'current-password';
+      setRegistration(false);
       await refresh(true);
-    } catch (error) { notify(error.message || '로그인에 실패했습니다.'); }
+    } catch (error) { notify(error.message || (register ? '계정 등록에 실패했습니다.' : '로그인에 실패했습니다.')); }
     finally { switching = false; controls(); }
   };
   control('local').onclick = () => {

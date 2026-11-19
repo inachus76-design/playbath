@@ -74,27 +74,35 @@ async function authenticate(request, db, register, now) {
     'attempts=CASE WHEN expires<=? THEN 1 ELSE attempts+1 END, expires=CASE WHEN expires<=? THEN excluded.expires ELSE expires END RETURNING attempts'
   ).bind(limitKey, now + 900, now, now).first();
   if (counter.attempts > 15) return json({error:'잠시 후 다시 시도해 주세요.'}, 429);
+  const token = random();
+  const sessionHash = await digest(token);
   if (register) {
-    if (typeof form.invite !== 'string' || !/^[a-f0-9]{48}$/.test(form.invite.trim())) return json({error:'등록 코드를 확인해 주세요.'}, 400);
-    const invite = await digest(form.invite.trim());
-    const available = await db.prepare('SELECT 1 FROM bath_invites WHERE hash=? AND expires>?').bind(invite, now).first();
-    if (!available) return json({error:'등록 코드가 만료되었거나 사용할 수 없습니다.'}, 403);
     const salt = random();
     const passwordHash = await derive(password, salt);
-    const inserted = await db.prepare(
-      'INSERT OR IGNORE INTO bath_accounts(username,salt,password,invite) SELECT ?,?,?,hash FROM bath_invites WHERE hash=? AND expires>?'
-    ).bind(username, salt, passwordHash, invite, now).run();
-    if (!inserted.meta.changes) return json({error:'등록 코드가 이미 사용되었거나 아이디가 중복됩니다.'}, 409);
+    // Preserve the existing invite column and foreign key with an expired,
+    // server-generated record. Users never receive or enter this value.
+    const registrationId = random();
+    const [, inserted] = await db.batch([
+      db.prepare('INSERT INTO bath_invites(hash,expires) SELECT ?,0 WHERE NOT EXISTS (SELECT 1 FROM bath_accounts WHERE username=?)')
+        .bind(registrationId, username),
+      db.prepare('INSERT INTO bath_accounts(username,salt,password,invite) SELECT ?,?,?,hash FROM bath_invites WHERE hash=?')
+        .bind(username, salt, passwordHash, registrationId),
+      db.prepare('INSERT INTO bath_sessions SELECT ?,username,? FROM bath_accounts WHERE username=? AND invite=?')
+        .bind(sessionHash, now + lifetime, username, registrationId),
+      db.prepare('DELETE FROM bath_sessions WHERE expires<=?').bind(now),
+      db.prepare('DELETE FROM bath_limits WHERE expires<=?').bind(now),
+    ]);
+    if (!inserted.meta.changes) return json({error:'이미 사용 중인 아이디입니다.'}, 409);
+    return json({username}, 200, cookie(token, lifetime));
   } else {
     const account = await db.prepare('SELECT salt,password FROM bath_accounts WHERE username=?').bind(username).first();
     const actual = await derive(password, account?.salt ?? '0'.repeat(64));
     if (!account || !same(actual, account.password)) return json({error:'아이디 또는 비밀번호를 확인해 주세요.'}, 401);
   }
-  const token = random();
   await db.batch([
     db.prepare('DELETE FROM bath_sessions WHERE expires<=?').bind(now),
     db.prepare('DELETE FROM bath_limits WHERE expires<=?').bind(now),
-    db.prepare('INSERT INTO bath_sessions VALUES (?,?,?)').bind(await digest(token), username, now + lifetime),
+    db.prepare('INSERT INTO bath_sessions VALUES (?,?,?)').bind(sessionHash, username, now + lifetime),
   ]);
   return json({username}, 200, cookie(token, lifetime));
 }
