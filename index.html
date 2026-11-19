@@ -59,15 +59,13 @@ function talk(message, status, manual = false) {
         speak(null);
         return;
       }
-      if (error) status.textContent = error === 'not-allowed'
-        ? '음성 시작을 한 번 누른 뒤 다시 시도해 주세요.'
-        : '읽기 음성을 재생하지 못했습니다. 태블릿의 한국어 글자 읽어주기 설정을 확인해 주세요.';
+      if (error) status.textContent = '';
       else if (manual) status.textContent = '음성 재생을 완료했습니다.';
     }
 
     const startTimeout = setTimeout(() => {
       if (currentSpeech === utterance && attempt === speechAttempt && !speech.speaking) {
-        status.textContent = '읽기 음성이 시작되지 않았습니다. 태블릿의 한국어 글자 읽어주기 설정을 확인해 주세요.';
+        status.textContent = '';
       }
     }, 3500);
     utterance.onstart = () => {
